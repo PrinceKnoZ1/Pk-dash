@@ -574,7 +574,7 @@ function viewAccount(account, settings) {
     <div class="page gutter">
       <div class="seg" id="mode-seg">
         <button data-mode="PAPER" class="${mode === "PAPER" ? "on" : ""}" ${dis}>PAPER</button>
-        <button data-mode="LIVE" class="${mode === "LIVE" ? "on" : ""}" ${dis}>LIVE</button>
+        <button data-mode="LIVE" class="disabled" disabled title="LIVE refused: priority 1 hard lock">LIVE</button>
       </div>
       ${store.writable ? "" : writeNote()}
       <div class="field"><label>Cash</label><div class="num" style="font-size:22px;font-weight:700">${fmtUsd(account && account.cash)}</div></div>
@@ -889,13 +889,7 @@ async function onMode(e) {
   if (!store.writable) { toast("Changes from Telegram (step 11)"); return; }
   const mode = btn.getAttribute("data-mode");
   if (mode === "LIVE") {
-    const typed = window.prompt("Type LIVE to switch to live trading.");
-    if (typed !== "LIVE") return;
-    try {
-      await store.write("/api/mode", { mode: "LIVE", confirm: "LIVE" });
-    } catch (err) {
-      toast((err.body && err.body.detail) || "LIVE refused");
-    }
+    toast("LIVE refused: priority 1 hard lock");
     return;
   }
   try {
