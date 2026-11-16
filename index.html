@@ -1,1 +1,44 @@
-<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FOMO Desk</title><body style="background:#000;color:#fff;font-family:-apple-system,system-ui"><h1>FOMO Desk</h1><p>Placeholder (web app built in a later step).</p>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>FOMO Desk</title>
+<style>
+html,body{margin:0;background:#000;color:#fff;font-family:-apple-system,system-ui,sans-serif}
+main{padding:calc(env(safe-area-inset-top) + 24px) 20px 24px}
+h1{font-size:34px;font-weight:700;margin:0 0 20px}
+.card{background:#1c1c1e;border-radius:14px;padding:4px 16px}
+.row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:.5px solid #38383a}
+.row:last-child{border-bottom:0}.k{color:#8e8e93}#msg{color:#8e8e93;margin-top:16px}
+</style></head>
+<body><main><h1>FOMO Desk</h1>
+<div class="card" id="card" hidden>
+<div class="row"><span class="k">Mode</span><span id="mode"></span></div>
+<div class="row"><span class="k">Status</span><span id="status"></span></div>
+<div class="row"><span class="k">Updated</span><span id="updated"></span></div>
+</div><div id="msg">Loading…</div></main>
+<script>
+(async () => {
+  const msg = document.getElementById('msg');
+  const h = new URLSearchParams(location.hash.slice(1));
+  const p = h.get('p'), k = h.get('k');
+  if (!p || !k || !/^[A-Za-z0-9_-]{20,}$/.test(p)) { msg.textContent = 'Locked'; return; }
+  const b64 = s => Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/') + '='.repeat((4 - s.length % 4) % 4)), c => c.charCodeAt(0));
+  async function load() {
+    try {
+      const r = await fetch('d/' + p + '/state.enc.json?t=' + Date.now(), {cache: 'no-store'});
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const e = await r.json();
+      const key = await crypto.subtle.importKey('raw', b64(k), {name: 'AES-GCM'}, false, ['decrypt']);
+      const pt = await crypto.subtle.decrypt({name: 'AES-GCM', iv: b64(e.iv)}, key, b64(e.ct));
+      const s = JSON.parse(new TextDecoder().decode(pt));
+      document.getElementById('mode').textContent = s.mode;
+      document.getElementById('status').textContent = s.status;
+      document.getElementById('updated').textContent = new Date(s.updated).toLocaleString();
+      document.getElementById('card').hidden = false; msg.textContent = '';
+    } catch (err) { msg.textContent = 'Locked (cannot read data)'; }
+  }
+  await load(); setInterval(load, 60000);
+})();
+</script></body></html>
