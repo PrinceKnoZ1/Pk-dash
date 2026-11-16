@@ -711,3 +711,10 @@ details.more > summary {
 }
 details.more > summary::-webkit-details-marker { display: none; }
 details.more .slider-row { padding-left: 0; padding-right: 0; }
+
+.updated-line.stale, .updated-line.stale .stale-badge, body.data-stale .updated-line {
+  color: var(--orange);
+}
+.stale-badge { font-weight: 700; }
+/* Stale snapshots must not look live (screen-card Live rules are unchanged). */
+body.data-stale .updated-line::before { content: none; }

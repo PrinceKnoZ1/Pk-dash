@@ -11,6 +11,7 @@ const BOT_COLOR = {
 const BOT_TITLE = { scanner: "Scanner", analyst: "Analyst", brain: "Brain", executor: "Executor", risk: "Risk" };
 const TABS = ["home", "bots", "activity", "account"];
 const RANGES = ["LIVE", "1H", "4H", "1D", "1W", "ALL"];
+const STALE_AFTER_S = 180;
 
 const store = createStore();
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -73,6 +74,28 @@ function ago(ts) {
   if (s < 3600) return Math.floor(s / 60) + "m ago";
   if (s < 86400) return Math.floor(s / 3600) + "h ago";
   return Math.floor(s / 86400) + "d ago";
+}
+
+function dataTimestamp(state) {
+  /* Time the snapshot's data was produced — never the phone's fetch or publish time. */
+  if (!state) return 0;
+  const raw = state.producedAt != null ? state.producedAt : state.updated;
+  if (raw == null || raw === "") return 0;
+  if (typeof raw === "number") return raw < 1e12 ? raw * 1000 : raw;
+  const d = Date.parse(raw);
+  return Number.isFinite(d) ? d : 0;
+}
+
+function staleAfterS(state) {
+  const n = Number(state && state.staleAfterS);
+  return Number.isFinite(n) && n > 0 ? n : STALE_AFTER_S;
+}
+
+function isStaleState(state, now) {
+  const ts = dataTimestamp(state);
+  if (!ts) return true;
+  const age = Math.max(0, ((now || Date.now()) - ts) / 1000);
+  return age > staleAfterS(state);
 }
 
 function go(page, mint) {
@@ -737,10 +760,25 @@ function runBeam() {
 
 function updateUpdatedLine(state) {
   const el = $("#updated-line");
-  if (!el || !state) return;
-  const ts = store.lastGood.at || (state.updated ? (state.updated < 1e12 ? state.updated * 1000 : state.updated) : 0);
-  const s = ts ? Math.max(0, Math.round((Date.now() - ts) / 1000)) : 0;
-  el.textContent = ts ? `Updated ${s}s ago` : "";
+  if (!el) return;
+  if (!state) {
+    el.textContent = "";
+    el.classList.remove("stale");
+    document.body.classList.remove("data-stale");
+    return;
+  }
+  const ts = dataTimestamp(state);
+  if (!ts) {
+    el.textContent = "";
+    el.classList.remove("stale");
+    document.body.classList.remove("data-stale");
+    return;
+  }
+  const stale = isStaleState(state);
+  el.innerHTML = `Last updated ${esc(fmtTime(ts))} · ${esc(ago(ts))}`
+    + (stale ? ` <span class="stale-badge">Stale</span>` : "");
+  el.classList.toggle("stale", stale);
+  document.body.classList.toggle("data-stale", stale);
 }
 
 function updateOffline() {
