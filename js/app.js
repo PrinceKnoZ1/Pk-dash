@@ -476,42 +476,75 @@ function viewAudit(audit) {
     </div>`;
 }
 
+function settingRow(k, st, ranges, choices, labels, kinds, dis) {
+  const label = (labels && labels[k]) || k.replace(/_/g, " ");
+  const kind = (kinds && kinds[k]) || (k in (choices || {}) ? "choice" : (ranges[k] ? "number" : "text"));
+  if (kind === "choice") {
+    const opts = (choices[k] || []).map((c) =>
+      `<option value="${esc(c)}" ${String(st[k]) === String(c) ? "selected" : ""}>${esc(c)}</option>`).join("");
+    return `<div class="slider-row" data-key="${esc(k)}">
+      <div class="lab"><span>${esc(label)}</span></div>
+      <select data-set="${esc(k)}" ${dis}>${opts}</select>
+    </div>`;
+  }
+  if (kind === "bool") {
+    const on = st[k] === true || st[k] === 1 || st[k] === "1" || st[k] === "true";
+    return `<div class="slider-row" data-key="${esc(k)}">
+      <div class="lab"><span>${esc(label)}</span>
+        <button type="button" class="switch ${on ? "on" : ""} ${dis ? "locked" : ""}" data-set="${esc(k)}" data-bool="1" ${dis} aria-label="${esc(label)}"><i></i></button>
+      </div>
+    </div>`;
+  }
+  if (kind === "time") {
+    return `<div class="slider-row" data-key="${esc(k)}">
+      <div class="lab"><span>${esc(label)}</span></div>
+      <input type="time" data-set="${esc(k)}" value="${esc(st[k] ?? "")}" ${dis}>
+    </div>`;
+  }
+  if (kind === "text") {
+    return `<div class="slider-row" data-key="${esc(k)}">
+      <div class="lab"><span>${esc(label)}</span></div>
+      <input type="text" data-set="${esc(k)}" value="${esc(st[k] ?? "")}" ${dis} autocomplete="off">
+    </div>`;
+  }
+  const r = ranges[k] || { min: 0, max: 100 };
+  const val = st[k] ?? "";
+  const span = Number(r.max) - Number(r.min);
+  const step = span > 10 ? (Number.isInteger(Number(val)) ? 1 : 0.1) : (span <= 2 ? 0.05 : 0.1);
+  return `<div class="slider-row" data-key="${esc(k)}">
+    <div class="lab"><span>${esc(label)}</span>
+      <input type="number" data-set="${esc(k)}" data-role="exact" value="${esc(val)}" min="${r.min}" max="${r.max}" step="${step}" ${dis}>
+    </div>
+    <input type="range" data-set="${esc(k)}" data-role="slider" value="${esc(val)}" min="${r.min}" max="${r.max}" step="${step}" ${dis}>
+    <div class="range-hint">${r.min} – ${r.max}</div>
+  </div>`;
+}
+
 function viewAccount(account, settings) {
   const mode = ((account && account.mode) || "PAPER").toUpperCase();
   const st = (settings && settings.settings) || {};
   const groups = (settings && settings.groups) || {};
+  const official = (settings && settings.official) || {};
   const ranges = (settings && settings.ranges) || {};
   const choices = (settings && settings.choices) || {};
+  const labels = (settings && settings.labels) || {};
+  const kinds = (settings && settings.kinds) || {};
   const dis = store.writable ? "" : "disabled";
   const picks = (account && account.copyPicks) || st.copy_picks || "off";
   const picksTime = (account && account.copyPicksTime) || st.copy_picks_time || "09:00";
   const push = (account && account.push) || { plan: "B", connected: false, note: "Telegram only on plan B; web push comes later" };
+  const skip = new Set(["mode", "copy_picks", "copy_picks_time"]);
+  const alwaysMain = new Set(["min_buy_usd"]); // user-chosen, keep with Brain tickets
+  const titles = { scanner: "Scanner", analyst: "Analyst", social: "Social", brain: "Brain", executor: "Executor", risk: "Risk", desk: "Desk" };
   const groupHtml = Object.entries(groups).map(([g, keys]) => {
-    const rows = keys.filter((k) => k !== "mode").map((k) => {
-      if (k in choices) {
-        return `<div class="slider-row">
-          <div class="lab"><span>${esc(k)}</span></div>
-          <select data-set="${esc(k)}" ${dis}>${choices[k].map((c) =>
-            `<option value="${esc(c)}" ${String(st[k]) === String(c) ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
-        </div>`;
-      }
-      if (typeof st[k] === "string" && !ranges[k]) {
-        return `<div class="slider-row">
-          <div class="lab"><span>${esc(k)}</span></div>
-          <input type="text" data-set="${esc(k)}" value="${esc(st[k] ?? "")}" ${dis}>
-        </div>`;
-      }
-      const r = ranges[k] || { min: 0, max: 100 };
-      const val = st[k] ?? "";
-      const step = (Number(r.max) - Number(r.min) > 10) ? 1 : 0.1;
-      return `<div class="slider-row">
-        <div class="lab"><span>${esc(k)}</span>
-          <input type="number" data-set="${esc(k)}" value="${esc(val)}" min="${r.min}" max="${r.max}" step="${step}" ${dis}>
-        </div>
-        <input type="range" data-set="${esc(k)}" value="${esc(val)}" min="${r.min}" max="${r.max}" step="${step}" ${dis}>
-      </div>`;
-    }).join("");
-    return `<div class="group-title">${esc(g)}</div><div class="card">${rows}</div>`;
+    const off = official[g] || keys;
+    const main = keys.filter((k) => (off.includes(k) || alwaysMain.has(k)) && !skip.has(k));
+    const more = keys.filter((k) => !off.includes(k) && !alwaysMain.has(k) && !skip.has(k));
+    const rows = main.map((k) => settingRow(k, st, ranges, choices, labels, kinds, dis)).join("");
+    const extra = more.length
+      ? `<details class="more"><summary>More</summary>${more.map((k) => settingRow(k, st, ranges, choices, labels, kinds, dis)).join("")}</details>`
+      : "";
+    return `<div class="group-title">${esc(titles[g] || g)}</div><div class="card">${rows}${extra}</div>`;
   }).join("");
   return `
     <div class="pagenav"><div class="title" style="padding-right:0">Account</div></div>
@@ -546,7 +579,10 @@ function viewAccount(account, settings) {
         <div class="row"><button class="open-fomo" id="btn-test-push" ${store.writable ? "" : "disabled"}>Send test push</button></div>
       </div>
       <button class="btn" id="btn-watch" style="margin-top:12px">Watch in Grok Bot</button>
-      <div id="settings-anchor">${groupHtml}</div>
+      <div class="group-title" id="settings-anchor">Settings</div>
+      ${store.writable ? `<p class="note" style="text-align:left">Bots pick up a change on their next tick.</p>`
+        : `<p class="note" style="text-align:left">View only here. Change in Telegram: set stop to -20%</p>`}
+      ${groupHtml}
     </div>`;
 }
 
@@ -746,7 +782,22 @@ function bind() {
   const screen = $("#screen-card");
   if (screen) screen.addEventListener("click", () => openScreenFs());
   $$("[data-pause]").forEach((el) => el.addEventListener("click", () => togglePause(el)));
-  $$("[data-set]").forEach((el) => el.addEventListener("change", () => saveSetting(el)));
+  $$("[data-set]").forEach((el) => {
+    el.addEventListener("change", () => saveSetting(el));
+    if (el.type === "range") el.addEventListener("input", () => {
+      $$("[data-set='" + el.getAttribute("data-set") + "']").forEach((n) => { if (n !== el) n.value = el.value; });
+    });
+    if (el.getAttribute("data-bool") === "1") {
+      el.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        if (el.disabled) return;
+        const on = !el.classList.contains("on");
+        el.classList.toggle("on", on);
+        el.dataset.value = on ? "true" : "false";
+        saveSetting(el);
+      });
+    }
+  });
   const modeSeg = $("#mode-seg");
   if (modeSeg) modeSeg.addEventListener("click", onMode);
   const invite = $("#btn-invite");
@@ -782,13 +833,13 @@ async function togglePause(el) {
 }
 
 async function saveSetting(el) {
-  if (!store.writable) { toast("Changes from Telegram (step 11)"); return; }
+  if (!store.writable) { toast("Changes from Telegram: set stop to -20%"); return; }
   const key = el.getAttribute("data-set");
-  const value = el.value;
-  $$("[data-set='" + key + "']").forEach((n) => { if (n !== el) n.value = value; });
+  const value = el.getAttribute("data-bool") === "1" ? (el.classList.contains("on") ? "true" : "false") : el.value;
+  $$("[data-set='" + CSS.escape(key) + "']").forEach((n) => { if (n !== el && n.type !== "button") n.value = value; });
   try {
     await store.write("/api/settings", { [key]: value });
-    toast("Saved " + key);
+    toast("Saved");
   } catch (err) {
     toast((err.body && err.body.detail) || "Could not save");
   }
